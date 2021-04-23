@@ -1,0 +1,63 @@
+service: 
+  name: keepitclean-backend-nodejs
+
+plugins:
+  - serverless-webpack
+  - serverless-offline
+  - serverless-sequelize-migrations
+
+custom:
+  region: us-east-1
+  stage: dev
+  stackPrefix: ${opt:stackPrefix, 'keep-it-clean'}
+  baseStack: ${opt:stackPrefix, 'keep-it-clean'}-${opt:stage, 'dev'}-base-infra
+  VpcStack: ${opt:vpc_stack}
+
+provider:
+  name: aws
+  logs:
+    websocket: true
+  stage: ${opt:stage,'dev'}
+  stackName: ${opt:stackPrefix, 'keep-it-clean'}-${opt:stage, 'dev'}-web-backend
+  apiGateway:
+    minimumCompressionSize: 0
+  runtime: nodejs12.x
+  memorySize: 512
+  timeout: 30
+  versionFunctions: false
+  iamManagedPolicies:
+    - arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess
+    - arn:aws:iam::aws:policy/service-role/AWSLambdaRole
+    - arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess
+  vpc:
+    securityGroupIds:
+      - ${cf:${self:custom.baseStack}.VPCLambdaSecurityGroup}
+    subnetIds:
+      - ${cf:${self:custom.baseStack}.VpcLambdaPrivateSubnet}
+  tags:
+    OWNER: indrapranesh
+    DESCRIPTION: In the purpose of Web Backend
+  environment:
+    DB_DIALECT: mysql
+    DB_PORT: 3306
+    DB_HOST: ${cf:${self:custom.baseStack}.RDSHost}
+    DB_NAME: database_master
+    DATABASE: database_master
+    DB_USERNAME: db_user
+    DB_PASSWORD: testpass
+    USER_POOLID: ${cf:${self:custom.baseStack}.UserPoolId}
+    CLIENT_ID: ${cf:${self:custom.baseStack}.UserPoolClientId}
+
+functions:
+  
+  create: 
+    handler: src/api/user.create
+    events:
+      - http:
+          path: api/user
+          method: post
+          cors: true
+          integration: lambda
+
+resources:
+  - ${file(./serverless-assets/serverless-template.yml)}

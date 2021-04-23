@@ -1,0 +1,26 @@
+version: 0.2
+
+env:
+  variables:
+    stage: dev
+    region: us-east-1
+    branchName: dev
+    run_sls: 'true'
+    dbPassword: testpass
+    app_prefix: keep-it-clean
+    vpc_stack: keep-it-clean-dev-base-infra
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 10
+    commands:
+      - export SLS_DEBUG=*
+      - apt update -y && apt install jq -y
+      - npm i -g serverless@1.51.0
+      - npm i
+      - chmod +x deploy.sh
+      - chmod +x infra-assets/scripts/deploy-base-infra.sh
+  post_build:
+    commands:
+      - ./deploy.sh

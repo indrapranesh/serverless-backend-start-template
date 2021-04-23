@@ -1,0 +1,1 @@
+export const LOG_TIMESTAMP_FORMAT = 'yyyy-mm-dd HH:MM:ss.l Z';

@@ -1,0 +1,1 @@
+./infra-assets/scripts/deploy-base-infra.sh || { echo 'Base infra deployment failed' ; }

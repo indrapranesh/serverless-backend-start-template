@@ -1,0 +1,832 @@
+Description: Keep it clean application infrastructure
+
+Parameters:
+  stage:
+    Type: String
+    Default: "dev"
+    AllowedValues:
+      - "dev"
+      - "qa"
+      - "prod"
+  IpRange:
+    Type: String
+    Description: "For qa -> 192, marketplace -> 172"
+  BastionImageId:
+    Type: "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
+    Default: /aws/service/ami-amazon-linux-latest/amzn-ami-hvm-x86_64-ebs
+  BastionKeyName:
+    Type: "AWS::EC2::KeyPair::KeyName"
+    Description: EC2 key used to connect to the bastion host
+  DatabaseName:
+    Type: String
+    Default: database_master
+  EngineVersion:
+    Type: String
+    Default: "5.6"
+
+  stackPrefix:
+    Type: String
+    Description: The prefix to use when naming resources in this stack. Normally we would use the stack name, but since this template can be used as a resource in other stacks we want to keep the naming consistent. No symbols allowed.
+    ConstraintDescription: Alphanumeric characters only, maximum 10 characters
+    MaxLength: 20
+  IPV6Enabled:
+    Description:    Should CloudFront to respond to IPv6 DNS requests with an IPv6 address for your distribution.
+    Type:           String
+    Default:        "true"
+    AllowedValues:
+      - true
+      - false
+
+  Compress:
+    Description:    CloudFront Origin Protocol Policy to apply to your origin.
+    Type:           String
+    Default:        "false"
+    AllowedValues:
+      - true
+      - false
+
+  DefaultTTL:
+    Description:    The default time in seconds that objects stay in CloudFront caches before CloudFront forwards another request to your custom origin. By default, AWS CloudFormation specifies 86400 seconds (one day).
+    Type:           String
+    Default:        "0"
+
+  MaxTTL:
+    Description:    The maximum time in seconds that objects stay in CloudFront caches before CloudFront forwards another request to your custom origin. By default, AWS CloudFormation specifies 31536000 seconds (one year).
+    Type:           String
+    Default:        "0"
+
+  MinTTL:
+    Description:    The minimum amount of time that you want objects to stay in the cache before CloudFront queries your origin to see whether the object has been updated.
+    Type:           String
+    Default:        "0"
+
+  SmoothStreaming:
+    Description:    Indicates whether to use the origin that is associated with this cache behavior to distribute media files in the Microsoft Smooth Streaming format.
+    Type:           String
+    Default:        "false"
+    AllowedValues:
+      - true
+      - false
+
+  QueryString:
+    Description:    CIndicates whether you want CloudFront to forward query strings to the origin that is associated with this cache behavior.
+    Type:           String
+    Default:        "true"
+    AllowedValues:
+      - true
+      - false
+
+  ForwardCookies:
+    Description:    Forwards specified cookies to the origin of the cache behavior.
+    Type:           String
+    Default:        "all"
+    AllowedValues:
+      - all
+      - whitelist
+      - none
+
+  ViewerProtocolPolicy:
+    Description:    The protocol that users can use to access the files in the origin that you specified in the TargetOriginId property when the default cache behavior is applied to a request.
+    Type:           String
+    Default:        "redirect-to-https"
+    AllowedValues:
+      - redirect-to-https
+      - allow-all
+      - https-only
+
+  PriceClass:
+    Description:    The price class that corresponds with the maximum price that you want to pay for CloudFront service. If you specify PriceClass_All, CloudFront responds to requests for your objects from all CloudFront edge locations.
+    Type:           String
+    Default:        "PriceClass_All"
+    AllowedValues:
+      - PriceClass_All
+      - PriceClass_100
+      - PriceClass_200
+
+  LoggingBucketVersioning:
+    Description:    The versioning state of an Amazon S3 bucket. If you enable versioning, you must suspend versioning to disable it.
+    Type:           String
+    Default:        "Suspended"
+    AllowedValues:
+      - Enabled
+      - Suspended
+
+  OriginBucketVersioning:
+    Description:    The versioning state of an Amazon S3 bucket. If you enable versioning, you must suspend versioning to disable it.
+    Type:           String
+    Default:        "Suspended"
+    AllowedValues:
+      - Enabled
+      - Suspended
+
+  GeoRestrictionType:
+    Description:    Geo Restriction Type
+    Type:           String
+    Default:        "none"
+    AllowedValues:
+      - none
+      - whitelist
+      - blacklist
+
+  DistributionDefaultRootObject:
+    Description:    CloudFront Distribution Default Root Object
+    Type:           String
+    Default:        "index.html"
+
+  Response404PagePath:
+    Description:    404 Error Response Page Path
+    Type:           String
+    Default:        "/index.html"
+
+  Response403PagePath:
+    Description:    403 Error Response Page Path
+    Type:           String
+    Default:        "/index.html"
+
+  ErrorCachingMinTTL:
+    Description:    403 and 404 Error Caching Min TTL
+    Type:           String
+    Default:        "60"
+  
+  backendSrcUrl:
+    Type: String
+    Description: Url of the repository from where the code has to be pulled
+  
+  branchName:
+    Type: String
+    Default: "dev"
+    AllowedValues:
+      - "dev"
+      - "qa"
+      - "uat"
+      - "master"
+
+Mappings:
+
+  DBInstanceClass:
+    dev: 
+      type: db.t2.micro
+    qa: 
+      type: db.t3.small
+    prod:
+      type: db.t3.large
+
+  RDSAllocatedStorage:
+    dev: 
+      size: 5
+    qa: 
+      size: 5
+    prod:
+      size: 100
+
+  RegionAndEnvironment2AZ:
+    us-east-1:
+      dev:
+        - us-east-1a
+        - us-east-1b
+        - us-east-1c
+      qa:
+        - us-east-1a
+        - us-east-1b
+        - us-east-1c
+      prod:
+        - us-east-1a
+        - us-east-1b
+        - us-east-1c
+
+    us-east-2:
+      dev:
+        - us-east-2a
+        - us-east-2b
+        - us-east-2c
+      qa:
+        - us-east-2a
+        - us-east-2b
+        - us-east-2c
+      prod:
+        - us-east-2a
+        - us-east-2b
+        - us-east-2c
+
+    us-west-1:
+      dev:
+        - us-west-1b
+        - us-west-1c
+      qa:
+        - us-west-1b
+        - us-west-1c
+      prod:
+        - us-west-1b
+        - us-west-1c
+
+    us-west-2:
+      dev:
+        - us-west-2a
+        - us-west-2b
+        - us-west-2c
+      qa:
+        - us-west-2a
+        - us-west-2b
+        - us-west-2c
+      prod:
+        - us-west-2a
+        - us-west-2b
+        - us-west-2c
+
+
+    
+Resources:
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Join 
+        - ''
+        - - !Ref IpRange
+          - 0.0.0/16
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+  # Setup networking resources for the private subnets. Containers
+  # in these subnets have only private IP addresses, and must use a NAT
+  # gateway to talk to the internet. We launch two NAT gateways, one for
+  # each private subnet.
+  NatGatewayAttachment:
+    Type: AWS::EC2::EIP
+    DependsOn: VPCGatewayAttachment
+    Properties:
+        Domain: vpc
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayAttachment.AllocationId
+      SubnetId: !Ref VPCPublicSubnet
+  LambdaPrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+  LambdaPrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref LambdaPrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+  LambdaPrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref LambdaPrivateRouteTable
+      SubnetId: !Ref VPCLambdaPrivateSubnet
+  LambdaPrivateAdditionalRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref LambdaPrivateRouteTable
+      SubnetId: !Ref VPCLambdaPrivateSubnetAdditional
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  VPCRDSPrivateSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select 
+        - '0'
+        - !FindInMap 
+          - RegionAndEnvironment2AZ
+          - !Ref 'AWS::Region'
+          - !Ref stage
+      CidrBlock: !Join 
+        - ''
+        - - !Ref IpRange
+          - 0.2.0/24
+      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: 'False'
+  VPCLambdaPrivateSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select 
+        - '1'
+        - !FindInMap 
+          - RegionAndEnvironment2AZ
+          - !Ref 'AWS::Region'
+          - !Ref stage
+      CidrBlock: !Join 
+        - ''
+        - - !Ref IpRange
+          - 0.4.0/24
+      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: 'False'
+  
+  VPCLambdaPrivateSubnetAdditional:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select 
+        - '2'
+        - !FindInMap 
+          - RegionAndEnvironment2AZ
+          - !Ref 'AWS::Region'
+          - !Ref stage
+      CidrBlock: !Join 
+        - ''
+        - - !Ref IpRange
+          - 0.6.0/24
+      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: 'False'
+  VPCPublicSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: !Join 
+        - ''
+        - - !Ref IpRange
+          - 0.1.0/24
+      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: 'True'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: d7334d1c-7a58-4530-8ba6-4745eda5d13a
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 5594b383-e847-470d-947b-9d487a5521c4
+  SubnetPublicRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref VPCPublicSubnet
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 0169361a-258d-4900-a5f4-b42bb91c0732
+  VPCLambdaSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: !Sub '${stackPrefix}-${stage}-vpc-lambda-security-group'
+        - Key: "owner"
+          Value: "indrapranesh"
+        - Key: "environment"
+          Value: !Ref stage
+        - Key: "workload"
+          Value: "keep-it-clean"
+
+      GroupName: !Sub ${stackPrefix}-${stage}-Lambda-SG
+      GroupDescription: EC2 Security Group for instances launched in the VPC by Lambda
+      VpcId: !Ref VPC
+
+  RdsSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: !Sub '${stackPrefix}-${stage}-rds-subnet-group'
+        - Key: "owner"
+          Value: "indrapranesh"
+        - Key: "environment"
+          Value: !Ref stage
+        - Key: "workload"
+          Value: "keep-it-clean"
+
+      DBSubnetGroupDescription: ${stackPrefix}-${stage} subnet group
+      SubnetIds:
+        - !Ref VPCRDSPrivateSubnet
+        - !Ref VPCLambdaPrivateSubnet
+        - !Ref VPCLambdaPrivateSubnetAdditional
+
+  RDSSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: !Sub '${stackPrefix}-${stage}-rds-security-group'
+        - Key: "owner"
+          Value: "indrapranesh"
+        - Key: "environment"
+          Value: !Ref stage
+        - Key: "workload"
+          Value: "keep-it-clean"
+        
+      GroupDescription: EC2 Security Group for instances launched in the VPC by RDS
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !Ref BastionSecurityGroup
+          FromPort: 3306
+          ToPort: 3306
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !Ref VPCLambdaSecurityGroup
+          FromPort: 3306
+          ToPort: 3306
+
+  
+
+  RdsInstance:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: !Sub '${stackPrefix}-${stage}-rds-instance'
+        - Key: "owner"
+          Value: "indrapranesh"
+        - Key: "environment"
+          Value: !Ref stage
+        - Key: "workload"
+          Value: "keep-it-clean"
+
+      DBInstanceIdentifier: !Sub
+                  - ${stackPrefix}-${stage}-db
+                  - stackPrefix: !Ref stackPrefix
+                    stage: !Ref stage
+      DBName: !Ref DatabaseName
+      AllocatedStorage: !FindInMap [ RDSAllocatedStorage, !Ref stage, size]
+      DBInstanceClass: !FindInMap [ DBInstanceClass, !Ref stage, type]
+      Engine: mysql
+      EngineVersion: !Ref EngineVersion
+      MasterUsername: 'db_user'
+      MasterUserPassword: 'testpass'
+      BackupRetentionPeriod: 30
+      DeletionProtection: false
+      DBSubnetGroupName: !Ref RdsSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      #StorageEncrypted: true
+
+  BastionSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: !Sub '${stackPrefix}-${stage}-bastion-security-group'
+        - Key: "owner"
+          Value: "indrapranesh"
+        - Key: "environment"
+          Value: !Ref stage
+        - Key: "workload"
+          Value: "keep-it-clean"
+
+      GroupDescription: !Sub 
+                  - 'Bastion for ${stage}'
+                  - { stage: !Ref stage }
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          FromPort: -1
+          ToPort: -1
+          IpProtocol: '-1'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: 22
+          ToPort: 22
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: 3306
+          ToPort: 3306
+      VpcId: !Ref VPC
+  BastionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+        AssumeRolePolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+            -   Effect: Allow
+                Principal:
+                    Service:
+                    - ec2.amazonaws.com
+                Action:
+                - "sts:AssumeRole"
+        Policies:
+        -   PolicyName: "ssm-s3-log-access"
+            PolicyDocument:
+                Version: '2012-10-17'
+                Statement:
+                -   Effect: Allow
+                    Action:
+                      - s3:GetObject
+                      - s3:PutObject
+                      - s3:PutObjectAcl
+                      - s3:GetEncryptionConfiguration
+                    Resource:
+                      - arn:aws:s3:::arop-common-ssm-logs/
+                      - arn:aws:s3:::arop-common-ssm-logs/*
+        ManagedPolicyArns:
+            - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        Path: /
+        Tags:
+            - Key: Name
+              Value: arop-bastion-role
+            - Key: workload
+              Value: keep-it-clean
+            - Key: environment
+              Value: !Ref stage
+            - Key: owner
+              Value: vramesh@presidio.com                  
+  BastionInstanceProfile:
+      Type: AWS::IAM::InstanceProfile
+      Properties:
+          Roles:
+              - Ref: BastionRole
+  Bastion:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: !Sub '${stackPrefix}-${stage}-bastion'
+        - Key: "owner"
+          Value: "indrapranesh"
+        - Key: "environment"
+          Value: !Ref stage
+        - Key: "workload"
+          Value: "keep-it-clean"
+
+      DisableApiTermination: false
+      ImageId: !Ref BastionImageId
+      InstanceType: t2.nano
+      KeyName: !Ref BastionKeyName
+      Monitoring: false
+      SubnetId: !Ref VPCPublicSubnet
+      SecurityGroupIds:
+        - !Ref BastionSecurityGroup
+      UserData:
+        Fn::Base64: 
+          Fn::Join:
+          - ''
+          - - "#!/bin/bash \n"
+            - "cd /tmp \n"
+            - "sudo yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm \n"
+            - "sudo start amazon-ssm-agent \n"
+            - "yum install mysql-client --assumeyes \n"
+      IamInstanceProfile: !Ref BastionInstanceProfile
+
+# Creates a user pool in cognito for your app to auth against
+# This example requires MFA and validates the phone number to use as MFA
+  UserPool:
+    Type: "AWS::Cognito::UserPool"
+    Properties:
+      UserPoolName: !Sub ${stackPrefix}-${stage}-userpool
+      AutoVerifiedAttributes:
+        - email
+      MfaConfiguration: "OFF"
+      Schema:
+        - Name: first_name
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+        - Name: last_name
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+        - Name: email
+          AttributeDataType: String
+          Mutable: false
+          Required: true
+        - Name: phone_number
+          AttributeDataType: String
+          Mutable: false
+          Required: false
+
+
+# Creates a User Pool Client to be used by the identity pool
+  UserPoolClient:
+    Type: "AWS::Cognito::UserPoolClient"
+    Properties:
+      ClientName: !Sub ${stackPrefix}-client
+      GenerateSecret: false
+      UserPoolId: !Ref UserPool
+        
+# ORIGIN S3 BUCKET
+  OriginBucket:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: 'Retain'
+    Properties:
+      BucketName: !Sub '${stackPrefix}-origin-bucket'
+      VersioningConfiguration:
+        Status: !Ref 'OriginBucketVersioning'
+      WebsiteConfiguration:
+        IndexDocument: !Sub 'index.html'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+                
+# ORIGIN S3 BUCKET
+  OriginBucket:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: 'Retain'
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: !Sub '${stackPrefix}-${stage}-origin-bucket'
+        - Key: "owner"
+          Value: "indrapranesh"
+        - Key: "environment"
+          Value: !Ref stage
+        - Key: "workload"
+          Value: "keep-it-clean"
+        - Key: public-access
+          Value: blocked
+        - Key: logging
+          Value: disabled
+        - Key: versioning
+          Value: disabled
+
+      BucketName: !Sub '${stackPrefix}-${stage}-origin-bucket'
+      VersioningConfiguration:
+        Status: !Ref 'OriginBucketVersioning'
+      WebsiteConfiguration:
+        IndexDocument: !Sub 'index.html'
+        ErrorDocument: !Sub 'index.html'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+  
+# Origin S3 Bucket Policy
+  OriginS3BucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket:           !Ref OriginBucket
+      PolicyDocument:
+        Statement:
+          - Sid:        !Sub 'PublicReadGetObject'
+            Effect:     Allow
+            Principal:  '*'
+            Action:     's3:GetObject'
+            Resource:   !Sub 'arn:aws:s3:::${stackPrefix}-${stage}-origin-bucket/*'
+
+#Codebuild creation section
+
+  # CodeBuildSourceCredential:
+  #   Type: 'AWS::CodeBuild::SourceCredential'
+  #   Properties:
+  #     Token: 
+  #     ServerType: GITHUB
+  #     AuthType: PERSONAL_ACCESS_TOKEN
+
+  BackendCodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: !Sub '${stackPrefix}-${stage}-backend-codebuild-project'
+        - Key: "owner"
+          Value: "indrapranesh"
+        - Key: "environment"
+          Value: !Ref stage
+        - Key: "workload"
+          Value: "keep-it-clean"
+
+      Name: !Sub ${stackPrefix}-${stage}-backend-codebuild
+      ServiceRole: !GetAtt 'CodeBuildProjectRole.Arn'
+      Source:
+        Location: !Ref backendSrcUrl
+        Type: GITHUB
+        Auth:
+          Type: OAUTH
+          Resource: '{{resolve:secretsmanager:github-creds:SecretString:token}}' # Personal Access Token
+        BuildSpec: !Sub 'buildspec-${stage}.yml'
+      SourceVersion: !Ref branchName   # Branch name
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:4.0
+        Type: LINUX_CONTAINER
+
+      VpcConfig:
+        SecurityGroupIds: 
+          - !Ref VPCLambdaSecurityGroup
+        Subnets: 
+          - !Ref VPCLambdaPrivateSubnet
+        VpcId: !Ref VPC
+
+  CodeBuildProjectRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: !Sub '${stackPrefix}-${stage}-codebuild-project-role'
+        - Key: "owner"
+          Value: "indrapranesh"
+        - Key: "environment"
+          Value: !Ref stage
+        - Key: "workload"
+          Value: "keep-it-clean"
+
+      RoleName: !Sub ${stackPrefix}-${stage}-codebuild-project-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service:
+                - 'codebuild.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Path: '/'
+      Policies:
+        - PolicyName: !Sub ${stackPrefix}-${stage}-codebuild-project-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - s3:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                  - ssm:DescribeParameters
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - cloudformation:*
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - iam:*
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - logs:*
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - apigateway:*
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - lambda:*
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - ec2:*
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - secretsmanager:*
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - cloudfront:*
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - rds:*
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - ecr:*
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - codebuild:*
+                Resource: '*'
+
+
+Outputs:
+  VpcLambdaPrivateSubnet:
+    Value: !Ref VPCLambdaPrivateSubnet
+  VpcLambdaPrivateSubnetAdditional:
+    Value: !Ref VPCLambdaPrivateSubnetAdditional
+  VPCRDSPrivateSubnet:
+    Value: !Ref VPCRDSPrivateSubnet
+  VPCLambdaSecurityGroup:
+    Value: !Ref VPCLambdaSecurityGroup
+  RDSHost:
+    Value: !GetAtt 
+              - RdsInstance
+              - Endpoint.Address
+    Export:
+      Name: !Sub ${stackPrefix}-${stage}-RDSHost
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+  UserPoolArn:
+    Value:
+      Fn::GetAtt:
+        - UserPool
+        - Arn
+  OriginBucket:
+    Description: "Name of S3 Origin bucket"
+    Value:       !Ref 'OriginBucket'
